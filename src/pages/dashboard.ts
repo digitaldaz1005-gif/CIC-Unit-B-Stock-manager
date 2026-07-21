@@ -8,6 +8,8 @@ import {
   type DashboardNotification,
 } from "../services/staffService"
 import { getStatusHistory } from "../services/factoryStatusService"
+import { downloadBackup, readBackupFile, importBackup, getBackupInfo } from "../services/backupService"
+import { showToast } from "../components/toast"
 
 export function renderDashboard(): HTMLElement {
   const content = document.createElement("div")
@@ -149,6 +151,21 @@ export function renderDashboard(): HTMLElement {
           <span class="action-icon">🏭</span>
           <span>Open Factory Display</span>
         </button>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <h3 class="section-title">Backup & Restore</h3>
+      <div class="actions-row">
+        <button class="action-btn" id="exportBackupBtn" style="background:linear-gradient(135deg, var(--success), #059669);color:#fff;border:none;">
+          <span class="action-icon">💾</span>
+          <span>Export Backup</span>
+        </button>
+        <button class="action-btn" id="importBackupBtn" style="background:linear-gradient(135deg, var(--info), var(--blue-dark));color:#fff;border:none;">
+          <span class="action-icon">📂</span>
+          <span>Import Backup</span>
+        </button>
+        <input type="file" id="backupFileInput" accept=".json" style="display:none;" />
       </div>
     </div>
 
@@ -378,6 +395,60 @@ export function renderDashboard(): HTMLElement {
       const url = new URL(window.location.href)
       url.hash = "factoryDisplay"
       window.open(url.toString(), "_blank", "noopener,noreferrer")
+    })
+  }
+
+  // Export backup
+  const exportBtn = content.querySelector("#exportBackupBtn")
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      try {
+        downloadBackup()
+        showToast("Backup exported successfully.", "success")
+      } catch (err: any) {
+        showToast(err?.message ?? "Failed to export backup.", "error")
+      }
+    })
+  }
+
+  // Import backup
+  const importBtn = content.querySelector("#importBackupBtn")
+  const fileInput = content.querySelector("#backupFileInput") as HTMLInputElement | null
+  if (importBtn && fileInput) {
+    importBtn.addEventListener("click", () => {
+      fileInput.click()
+    })
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      try {
+        const content = await readBackupFile(file)
+        const info = getBackupInfo(content)
+        
+        if (!info) {
+          showToast("❌ Invalid backup file.", "error")
+          return
+        }
+
+        if (!confirm(`Restore backup from ${info.date}?\n\nThis will replace all current data.`)) {
+          return
+        }
+
+        importBackup(content)
+        showToast("✅ Backup restored successfully. Refreshing...", "success")
+        
+        // Refresh the application
+        setTimeout(() => {
+          window.location.reload()
+        }, 1500)
+      } catch (err: any) {
+        showToast(err?.message ?? "Failed to import backup.", "error")
+      } finally {
+        // Reset file input
+        fileInput.value = ""
+      }
     })
   }
 

@@ -162,6 +162,20 @@ export async function upsertStockItem(item: StockItem) {
   return data as StockItem
 }
 
+export async function deleteStockItem(core: string) {
+  if (!supabase) {
+    const current = readLocal<StockItem[]>('cicStock', [])
+    writeLocal('cicStock', current.filter(existing => existing.core !== core))
+    return
+  }
+
+  const { data, error } = await supabase.from('stock').delete().eq('core', core).select()
+  if (error) throw error
+  if (!data || data.length === 0) {
+    throw new Error(`Core "${core}" could not be deleted. Check database delete permissions.`)
+  }
+}
+
 export async function addMovement(movement: StockMovement) {
   if (!supabase) {
     const history = readLocal<StockMovement[]>('cicHistory', [])

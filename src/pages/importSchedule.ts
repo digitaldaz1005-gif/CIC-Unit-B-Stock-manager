@@ -9,6 +9,7 @@ import {
   createMissingStockItems,
 } from "../services/scheduleService"
 import { showToast } from "../components/toast"
+import { refreshData } from "../services/refresh"
 
 export function renderImportSchedule(): HTMLElement {
   const content = document.createElement("div")
@@ -205,6 +206,7 @@ export function renderImportSchedule(): HTMLElement {
 
       const createdCores = await createMissingStockItems(result.items)
       renderTables()
+      if (createdCores > 0) await refreshData()
       if (createdCores > 0) {
         showToast(`Imported ${result.items.length} schedule item(s). Week: ${result.scheduleDate || "N/A"}. Created ${createdCores} new core(s) in stock.`, "success")
       } else {

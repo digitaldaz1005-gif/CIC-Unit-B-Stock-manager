@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx"
-import { upsertStockItem, type StockItem } from "../supabase"
+import { upsertStockItem, loadStock, type StockItem } from "../supabase"
 
 export type ScheduleItem = {
   core: string
@@ -93,24 +93,25 @@ export function deleteScheduleItems(cores: string[]): number {
 }
 
 export async function createMissingStockItems(items: ScheduleItem[]): Promise<number> {
-  const raw = localStorage.getItem("cicStock")
-  let stock: StockItem[] = []
-  try { stock = raw ? JSON.parse(raw) : [] } catch { stock = [] }
-  const existingCores = new Set(stock.map(s => s.core))
+  // Always check the live stock list (Supabase or local fallback) so existing
+  // cores are never overwritten and only genuinely new cores are added.
+  const stock = await loadStock()
+  const normalise = (c: string) => c.trim().toUpperCase()
+  const existingCores = new Set(stock.map(s => normalise(s.core)))
   let created = 0
   for (const item of items) {
-    if (!existingCores.has(item.core)) {
-      const newItem: StockItem = {
-        core: item.core,
-        quantity: 0,
-        minimum_stock: 0,
-        low_stock_trigger: 0,
-        last_updated: new Date().toLocaleString(),
-      }
-      await upsertStockItem(newItem)
-      existingCores.add(item.core)
-      created++
+    const key = normalise(item.core)
+    if (!key || existingCores.has(key)) continue
+    const newItem: StockItem = {
+      core: item.core.trim(),
+      quantity: 0,
+      minimum_stock: 0,
+      low_stock_trigger: 0,
+      last_updated: new Date().toLocaleString(),
     }
+    await upsertStockItem(newItem)
+    existingCores.add(key)
+    created++
   }
   return created
 }

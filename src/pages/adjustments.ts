@@ -1,6 +1,6 @@
 import { Layout } from "../layout/layout"
 import { state } from "../services/state"
-import { saveAdjustment, addMovement, upsertStockItem } from "../supabase"
+import { saveAdjustment, addMovement, upsertStockItem, deleteStockItem } from "../supabase"
 import { showToast } from "../components/toast"
 import { refreshData } from "../services/refresh"
 
@@ -39,6 +39,7 @@ export function renderAdjustments(): HTMLElement {
 
   content.innerHTML = `
     <div class="form-section">
+      <div style="display:flex;flex-direction:column;gap:20px;">
       <form class="form" id="adjustmentForm">
         <div class="form-header">Record Adjustment</div>
 
@@ -77,6 +78,30 @@ export function renderAdjustments(): HTMLElement {
 
         <button type="submit">Record Adjustment</button>
       </form>
+
+      <form class="form" id="deleteCoreForm">
+        <div class="form-header">Delete Core</div>
+
+        <div class="form-group">
+          <label>Core Number</label>
+          <select id="deleteCore" required>
+            <option value="">Select a core...</option>
+            ${coreOptions}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Operator</label>
+          <input id="deleteOperator" placeholder="Operator name" required>
+        </div>
+
+        <p style="color:var(--text-muted);font-size:12px;margin:0;">
+          Removes the core from the stock list. Past history and adjustments are kept.
+        </p>
+
+        <button type="submit" style="background:#e53935;color:#fff;">Delete Core</button>
+      </form>
+      </div>
 
       <div class="table-container">
         <table class="table">
@@ -170,6 +195,57 @@ export function renderAdjustments(): HTMLElement {
     } finally {
       submitBtn.disabled = false
       submitBtn.textContent = "Record Adjustment"
+    }
+  }
+
+  const deleteForm = content.querySelector("#deleteCoreForm") as HTMLFormElement
+
+  deleteForm.onsubmit = async (e: Event) => {
+    e.preventDefault()
+
+    const core = (content.querySelector("#deleteCore") as HTMLSelectElement).value.trim()
+    const operator = (content.querySelector("#deleteOperator") as HTMLInputElement).value.trim()
+
+    if (!core || !operator) {
+      showToast("Please select a core and enter an operator name.", "error")
+      return
+    }
+
+    const stock = state.stock.find(s => s.core === core)
+    if (!stock) {
+      showToast(`Core "${core}" not found in stock.`, "error")
+      return
+    }
+
+    const warning = stock.quantity > 0
+      ? `Core ${core} still has ${stock.quantity} in stock.\n\nDelete it from the stock list anyway?`
+      : `Delete core ${core} from the stock list?`
+    if (!confirm(warning)) return
+
+    const submitBtn = deleteForm.querySelector("button")!
+    submitBtn.disabled = true
+    submitBtn.textContent = "Deleting..."
+
+    try {
+      await deleteStockItem(core)
+
+      await addMovement({
+        type: "ADJUSTMENT",
+        core,
+        quantity: -stock.quantity,
+        reason: "Core deleted",
+        user: operator,
+        date: new Date().toLocaleString(),
+      })
+
+      showToast(`Core ${core} deleted from stock.`, "success")
+      deleteForm.reset()
+      await refreshData()
+    } catch (err: any) {
+      showToast(err?.message ?? "Failed to delete core.", "error")
+    } finally {
+      submitBtn.disabled = false
+      submitBtn.textContent = "Delete Core"
     }
   }
 
